@@ -452,9 +452,9 @@ function App() {
           />
 
           <div>
-            <div className="flex justify-between items-center px-4 py-3 max-w-6xl mx-auto">
-              <h1 className="text-2xl font-bold">Raila Circles</h1>
-              <div className="flex items-center gap-3">
+            <div className="flex flex-wrap justify-between items-center gap-2 px-4 py-3 max-w-6xl mx-auto">
+              <h1 className="text-2xl font-bold shrink-0">Raila Circles</h1>
+              <div className="flex items-center gap-3 min-w-0">
                 <HelpButton onClick={() => setShowHelp(true)} />
                 <WalletStatus />
               </div>
