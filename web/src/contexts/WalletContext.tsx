@@ -13,6 +13,8 @@ interface WalletState {
   isStandalone: boolean
   /** The Safe address used for lender operations */
   safeAddress: Address | undefined
+  /** All Safes owned by the connected EOA (standalone mode) */
+  availableSafes: Address[]
   /** True while looking up Safes for the connected EOA */
   safeLoading: boolean
   /** Error message if Safe lookup failed or no Safe found */
@@ -30,6 +32,7 @@ const WalletContext = createContext<WalletState>({
   isConnected: false,
   isStandalone: false,
   safeAddress: undefined,
+  availableSafes: [],
   safeLoading: false,
   safeError: null,
   setSafeAddress: () => {},
@@ -40,6 +43,7 @@ const WalletContext = createContext<WalletState>({
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<Address | undefined>(undefined)
   const [safeAddress, setSafeAddressState] = useState<Address | undefined>(undefined)
+  const [availableSafes, setAvailableSafes] = useState<Address[]>([])
   const [safeLoading, setSafeLoading] = useState(false)
   const [safeError, setSafeError] = useState<string | null>(null)
 
@@ -56,6 +60,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!address) {
       setSafeAddressState(undefined)
+      setAvailableSafes([])
       setSafeError(null)
       return
     }
@@ -73,6 +78,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     lookupSafes(address)
       .then((safes) => {
         if (cancelled) return
+        setAvailableSafes(safes)
         if (safes.length === 0) {
           setSafeError(`No Safe wallet found for ${address.slice(0, 6)}...${address.slice(-4)}`)
           setSafeAddressState(undefined)
@@ -110,6 +116,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       isConnected: !!address,
       isStandalone,
       safeAddress,
+      availableSafes,
       safeLoading,
       safeError,
       setSafeAddress,

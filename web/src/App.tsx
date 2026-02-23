@@ -293,7 +293,7 @@ function CirclesInfo({ address }: { address: string }) {
 }
 
 function WalletStatus() {
-  const { address, isConnected, isStandalone, safeAddress, connect, disconnect } = useWallet()
+  const { address, isConnected, isStandalone, safeAddress, availableSafes, setSafeAddress, connect, disconnect } = useWallet()
   const [copied, setCopied] = useState(false)
   const [connectError, setConnectError] = useState<string | null>(null)
 
@@ -402,17 +402,32 @@ function WalletStatus() {
               </button>
             )}
           </div>
-          {/* Show Safe address when in standalone mode and Safe is different from EOA */}
+          {/* Show Safe selector when multiple Safes, or static link for single */}
           {isStandalone && safeAddress && safeAddress !== address && (
-            <a
-              href={`https://app.safe.global/home?safe=gno:${safeAddress}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-mono text-xs text-blue-500 hover:text-blue-700"
-              title="Safe wallet"
-            >
-              Safe: {safeAddress.slice(0, 6)}...{safeAddress.slice(-4)}
-            </a>
+            availableSafes.length > 1 ? (
+              <select
+                value={safeAddress}
+                onChange={(e) => setSafeAddress(e.target.value as Address)}
+                className="font-mono text-xs text-blue-500 bg-transparent border border-blue-200 rounded px-1 py-0.5 cursor-pointer outline-none focus:border-blue-500"
+                title="Switch Safe"
+              >
+                {availableSafes.map((safe) => (
+                  <option key={safe} value={safe}>
+                    Safe: {safe.slice(0, 6)}...{safe.slice(-4)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <a
+                href={`https://app.safe.global/home?safe=gno:${safeAddress}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-xs text-blue-500 hover:text-blue-700"
+                title="Safe wallet"
+              >
+                Safe: {safeAddress.slice(0, 6)}...{safeAddress.slice(-4)}
+              </a>
+            )
           )}
         </div>
       </div>
