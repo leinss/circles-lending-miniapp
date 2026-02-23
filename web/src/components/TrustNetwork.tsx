@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Sdk } from '@aboutcircles/sdk'
-import { circlesConfig } from '@aboutcircles/sdk-core'
 import { useWallet } from '../contexts/WalletContext.tsx'
 import { useContractRead } from '../hooks/useContractRead.ts'
-import { MODULE_ADDRESS, SAFE_ABI } from '../config/constants.ts'
+import { MODULE_ADDRESS, SAFE_ABI, CIRCLES_SDK_CONFIG } from '../config/constants.ts'
 
 interface TrustConnection {
   address: string
@@ -21,7 +20,7 @@ export function TrustNetwork() {
 
     const loadNetwork = async () => {
       try {
-        const sdk = new Sdk({ ...circlesConfig[100], circlesRpcUrl: 'https://staging.circlesubi.network/' })
+        const sdk = new Sdk(CIRCLES_SDK_CONFIG)
 
         // Get all trust relations
         const relations = await sdk.data.getTrustRelations(address)

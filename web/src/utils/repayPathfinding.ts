@@ -1,8 +1,7 @@
 import { createPublicClient, http } from 'viem'
 import { gnosis } from 'viem/chains'
-import { MODULE_ADDRESS } from '../config/constants.ts'
+import { MODULE_ADDRESS, CIRCLES_SDK_CONFIG } from '../config/constants.ts'
 import { Sdk } from '@aboutcircles/sdk'
-import { circlesConfig } from '@aboutcircles/sdk-core'
 
 const publicClient = createPublicClient({
   chain: gnosis,
@@ -44,7 +43,7 @@ export async function findRepayPaths(borrowerAddress: string): Promise<RepayPath
   console.log(`\n=== Finding repay paths for ${borrowerAddress.slice(0, 8)} ===`)
 
   // Get all addresses in trust network (will expand as we explore)
-  const sdk = new Sdk({ ...circlesConfig[100], circlesRpcUrl: 'https://staging.circlesubi.network/' })
+  const sdk = new Sdk(CIRCLES_SDK_CONFIG)
   const relations = await sdk.data.getTrustRelations(borrowerAddress as `0x${string}`)
   const allAddresses = new Set<string>([borrowerAddress])
 

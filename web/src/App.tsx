@@ -8,9 +8,8 @@ import { Settings } from './components/Settings.tsx'
 import { Borrow } from './components/Borrow.tsx'
 import { Debts } from './components/Debts.tsx'
 import { Sdk } from '@aboutcircles/sdk'
-import { circlesConfig } from '@aboutcircles/sdk-core'
 import { formatUnits } from 'viem'
-import { MODULE_ADDRESS, SAFE_ABI, USDC_ADDRESS, ERC20_ABI } from './config/constants.ts'
+import { MODULE_ADDRESS, SAFE_ABI, USDC_ADDRESS, ERC20_ABI, CIRCLES_SDK_CONFIG } from './config/constants.ts'
 
 const queryClient = new QueryClient()
 
@@ -113,14 +112,41 @@ function BorrowerPanel() {
   )
 }
 
+function StandaloneBanner() {
+  return (
+    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 max-w-md">
+      <div className="flex items-start gap-2">
+        <svg className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <div>
+          <p className="text-sm font-medium text-amber-800">Standalone mode</p>
+          <p className="text-xs text-amber-700 mt-1">
+            Lending requires a Safe account. Use the{' '}
+            <a
+              href="https://circles.land"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline font-medium"
+            >
+              Circles miniapp
+            </a>{' '}
+            version to become a lender.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function Dashboard() {
-  const { isConnected } = useWallet()
+  const { isConnected, isStandalone } = useWallet()
 
   if (!isConnected) return null
 
   return (
     <div className="flex flex-col lg:flex-row gap-8 max-w-6xl mx-auto">
-      <LenderPanel />
+      {isStandalone ? <StandaloneBanner /> : <LenderPanel />}
       <div className="flex-1 max-w-2xl">
         <BorrowerPanel />
       </div>
@@ -140,7 +166,7 @@ function CirclesInfo({ address }: { address: string }) {
         setLoading(true)
         setError(null)
 
-        const sdk = new Sdk({ ...circlesConfig[100], circlesRpcUrl: 'https://staging.circlesubi.network/' })
+        const sdk = new Sdk(CIRCLES_SDK_CONFIG)
 
         const avatarData = await sdk.data.getAvatar(address as `0x${string}`)
 
@@ -263,7 +289,9 @@ function WalletStatus() {
         <div className="flex flex-col items-end gap-1">
           <div className="flex items-center gap-1">
             <a
-              href={`https://app.safe.global/home?safe=gno:${address}`}
+              href={isStandalone
+                ? `https://gnosisscan.io/address/${address}`
+                : `https://app.safe.global/home?safe=gno:${address}`}
               target="_blank"
               rel="noopener noreferrer"
               className="font-mono text-xs text-gray-600 hover:text-gray-800"

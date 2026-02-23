@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { findLendingPathsStreaming, MAX_PATH_DEPTH } from '../utils/pathfinding.ts'
 import type { LendingPath } from '../utils/pathfinding.ts'
 import { Sdk } from '@aboutcircles/sdk'
-import { circlesConfig } from '@aboutcircles/sdk-core'
+import { CIRCLES_SDK_CONFIG } from '../config/constants.ts'
 
 export interface EnrichedLendingPath extends LendingPath {
   sourceName?: string
@@ -37,7 +37,7 @@ export function useLendingPaths(borrowerAddress: string | undefined, enabled: bo
     if (!borrowerAddress || !enabled) return
 
     const SECONDS_PER_YEAR = 365 * 24 * 60 * 60
-    const sdk = new Sdk({ ...circlesConfig[100], circlesRpcUrl: 'https://staging.circlesubi.network/' })
+    const sdk = new Sdk(CIRCLES_SDK_CONFIG)
     const profileCache = new Map<string, { name?: string; image?: string }>()
 
     async function enrichPath(path: LendingPath): Promise<EnrichedLendingPath> {

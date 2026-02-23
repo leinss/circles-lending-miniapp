@@ -1,4 +1,14 @@
+import { circlesConfig } from '@aboutcircles/sdk-core'
+
 export const MODULE_ADDRESS = '0xB877459e28ae22B6CE214a3af7b3dcEC96fB8ca4'
+
+export const GNOSIS_CHAIN_ID = 100
+export const GNOSIS_CHAIN_ID_HEX = '0x64'
+
+export const CIRCLES_SDK_CONFIG = {
+  ...circlesConfig[GNOSIS_CHAIN_ID],
+  circlesRpcUrl: 'https://staging.circlesubi.network/',
+}
 
 export const USDC_ADDRESS = '0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0' // USDC.e on Gnosis
 

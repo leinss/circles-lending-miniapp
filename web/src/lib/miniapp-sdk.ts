@@ -97,9 +97,42 @@ if (!isStandalone) {
 
 // --- Standalone mode: injected provider ---
 
+const GNOSIS_CHAIN_ID_HEX = '0x64'
+
+/** Ensure the injected wallet is on Gnosis Chain, auto-switching if needed. */
+async function ensureGnosisChain(): Promise<void> {
+  if (!window.ethereum) return
+  const chainId = (await window.ethereum.request({ method: 'eth_chainId' })) as string
+  if (chainId.toLowerCase() === GNOSIS_CHAIN_ID_HEX) return
+
+  try {
+    await window.ethereum.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: GNOSIS_CHAIN_ID_HEX }],
+    })
+  } catch (switchErr: any) {
+    // 4902 = chain not added yet
+    if (switchErr?.code === 4902) {
+      await window.ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: GNOSIS_CHAIN_ID_HEX,
+          chainName: 'Gnosis',
+          nativeCurrency: { name: 'xDAI', symbol: 'XDAI', decimals: 18 },
+          rpcUrls: ['https://rpc.gnosischain.com'],
+          blockExplorerUrls: ['https://gnosisscan.io'],
+        }],
+      })
+    } else {
+      throw new Error('Please switch to Gnosis Chain to use this app.')
+    }
+  }
+}
+
 /** Connect via injected wallet (MetaMask etc.). Standalone only. */
 export async function connectInjected(): Promise<Address> {
   if (!window.ethereum) throw new Error('No wallet extension found. Install MetaMask.')
+  await ensureGnosisChain()
   const accounts = (await window.ethereum.request({ method: 'eth_requestAccounts' })) as string[]
   const addr = accounts[0] as Address
   _address = addr
@@ -126,10 +159,22 @@ if (isStandalone && window.ethereum) {
     }
   })
 
-  // Auto-reconnect if previously authorized (no popup)
-  window.ethereum.request({ method: 'eth_accounts' }).then((accounts) => {
+  // Disconnect if user switches away from Gnosis Chain
+  window.ethereum.on('chainChanged', (chainId: unknown) => {
+    if ((chainId as string).toLowerCase() !== GNOSIS_CHAIN_ID_HEX && _address) {
+      console.warn('Switched away from Gnosis Chain — disconnecting')
+      _address = null
+      _listeners.forEach((fn) => fn(null))
+    }
+  })
+
+  // Auto-reconnect if previously authorized AND on Gnosis Chain
+  Promise.all([
+    window.ethereum.request({ method: 'eth_accounts' }),
+    window.ethereum.request({ method: 'eth_chainId' }),
+  ]).then(([accounts, chainId]) => {
     const accs = accounts as string[]
-    if (accs.length > 0) {
+    if (accs.length > 0 && (chainId as string).toLowerCase() === GNOSIS_CHAIN_ID_HEX) {
       _address = accs[0] as Address
       _listeners.forEach((fn) => fn(_address))
     }
@@ -138,13 +183,30 @@ if (isStandalone && window.ethereum) {
 
 // --- Standalone transaction/signing helpers ---
 
+/** Poll for a transaction receipt until mined (or timeout). */
+async function waitForReceipt(txHash: string, timeoutMs = 60_000): Promise<void> {
+  if (!window.ethereum) return
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    const receipt = await window.ethereum.request({
+      method: 'eth_getTransactionReceipt',
+      params: [txHash],
+    })
+    if (receipt) return
+    await new Promise((r) => setTimeout(r, 2_000))
+  }
+  throw new Error(`Transaction ${txHash.slice(0, 10)}... not mined within ${timeoutMs / 1000}s`)
+}
+
 async function _sendViaInjected(transactions: Transaction[]): Promise<string[]> {
   if (!window.ethereum || !_address) throw new Error('Wallet not connected')
   const hashes: string[] = []
-  for (const tx of transactions) {
+  for (let i = 0; i < transactions.length; i++) {
+    // Wait for previous tx to be mined before sending the next one
+    if (i > 0) await waitForReceipt(hashes[i - 1])
     const hash = (await window.ethereum.request({
       method: 'eth_sendTransaction',
-      params: [{ from: _address, to: tx.to, data: tx.data || '0x', value: tx.value || '0x0' }],
+      params: [{ from: _address, to: transactions[i].to, data: transactions[i].data || '0x', value: transactions[i].value || '0x0' }],
     })) as string
     hashes.push(hash)
   }

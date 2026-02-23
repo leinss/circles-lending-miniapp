@@ -1,8 +1,7 @@
 import { Sdk } from '@aboutcircles/sdk'
-import { circlesConfig } from '@aboutcircles/sdk-core'
 import { createPublicClient, http } from 'viem'
 import { gnosis } from 'viem/chains'
-import { MODULE_ADDRESS, SAFE_ABI, USDC_ADDRESS, ERC20_ABI } from '../config/constants.ts'
+import { MODULE_ADDRESS, SAFE_ABI, USDC_ADDRESS, ERC20_ABI, CIRCLES_SDK_CONFIG } from '../config/constants.ts'
 
 // Max hops in the lending path (configurable)
 export const MAX_PATH_DEPTH = 5
@@ -49,7 +48,7 @@ const MODULE_ABI = [{
  * Get all addresses that trust the given address
  */
 export async function getTrusters(address: string): Promise<string[]> {
-  const sdk = new Sdk({ ...circlesConfig[100], circlesRpcUrl: 'https://staging.circlesubi.network/' })
+  const sdk = new Sdk(CIRCLES_SDK_CONFIG)
   const relations = await sdk.data.getTrustRelations(address as `0x${string}`)
 
   // Filter for those who trust the address (trustedBy or mutuallyTrusts)

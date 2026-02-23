@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { findRepayPaths } from '../utils/repayPathfinding.ts'
 import type { RepayPath } from '../utils/repayPathfinding.ts'
 import { Sdk } from '@aboutcircles/sdk'
-import { circlesConfig } from '@aboutcircles/sdk-core'
+import { CIRCLES_SDK_CONFIG } from '../config/constants.ts'
 
 export interface EnrichedRepayPath extends RepayPath {
   profiles: {
@@ -28,7 +28,7 @@ export function useRepayPaths(borrowerAddress: string | undefined, enabled: bool
       if (paths.length === 0) return []
 
       // Enrich with profiles
-      const sdk = new Sdk({ ...circlesConfig[100], circlesRpcUrl: 'https://staging.circlesubi.network/' })
+      const sdk = new Sdk(CIRCLES_SDK_CONFIG)
       const allAddresses = new Set<string>()
 
       paths.forEach(path => {
