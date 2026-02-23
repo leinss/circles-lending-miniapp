@@ -5,6 +5,9 @@ dist
 .env.*.local
 .DS_Store
 
+# Playwright / test artifacts
+.playwright-mcp/
+
 # Contracts
 contracts/out
 contracts/cache
