@@ -8,7 +8,7 @@
  *      (sign with personal_sign → v+4 adjustment → eth_sendTransaction)
  */
 
-import { encodeFunctionData, type Address } from 'viem'
+import { encodeFunctionData, getAddress, type Address } from 'viem'
 
 // ---------------------------------------------------------------------------
 // ABI fragments for Safe contract interaction
@@ -75,7 +75,9 @@ const SAFE_TX_SERVICE = 'https://safe-transaction-gnosis-chain.safe.global/api/v
 // ---------------------------------------------------------------------------
 
 export async function lookupSafes(ownerAddress: string): Promise<Address[]> {
-  const res = await fetch(`${SAFE_TX_SERVICE}/owners/${ownerAddress}/safes/`)
+  // Safe TX Service requires EIP-55 checksummed addresses
+  const checksummed = getAddress(ownerAddress)
+  const res = await fetch(`${SAFE_TX_SERVICE}/owners/${checksummed}/safes/`)
   if (!res.ok) throw new Error(`Safe TX Service error: ${res.status}`)
   const body = await res.json() as { safes: string[] }
   return (body.safes ?? []) as Address[]
