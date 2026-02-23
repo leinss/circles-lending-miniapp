@@ -229,13 +229,13 @@ export function Settings({ moduleEnabled }: { moduleEnabled?: boolean }) {
                   <span className="px-2 text-xs font-semibold text-gray-500 border-l-2 border-gray-200 whitespace-nowrap">USDC.e</span>
                 </div>
               </div>
-              <div className="w-24">
+              <div className="flex-1 min-w-0">
                 <div className="flex items-center border-2 border-gray-200 rounded-lg focus-within:border-green-500 transition-colors bg-white">
                   <input
                     type="text"
                     value={minLendIR}
                     onChange={(e) => setMinLendIR(e.target.value)}
-                    className="flex-1 px-2 py-2 text-sm font-medium border-0 outline-none bg-transparent text-center"
+                    className="flex-1 min-w-0 px-3 py-2 text-sm font-medium border-0 outline-none bg-transparent text-center"
                     placeholder="5.00"
                   />
                   <span className="px-2 text-xs font-semibold text-gray-500 border-l-2 border-gray-200">%</span>
