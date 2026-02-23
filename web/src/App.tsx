@@ -38,8 +38,10 @@ function EnableModule() {
         })
         const hash = await executeSafeTransaction(safeAddress, safeAddress, data, address)
         setSafeTxHash(hash)
-      } catch (err) {
-        setSafeTxError(err instanceof Error ? err.message : 'Transaction failed')
+      } catch (err: any) {
+        const isRejection = err?.code === 4001 || err?.message?.includes('User denied') || err?.message?.includes('rejected')
+        setSafeTxError(isRejection ? 'Transaction rejected by user' : (err instanceof Error ? err.message : 'Transaction failed'))
+        setTimeout(() => setSafeTxError(null), 8000)
       } finally {
         setSafeTxPending(false)
       }
@@ -68,7 +70,10 @@ function EnableModule() {
         {pending ? 'Enabling Module...' : 'Enable Module'}
       </button>
       {safeTxError && (
-        <div className="text-sm text-red-600">{safeTxError}</div>
+        <div className="text-sm text-red-600 flex items-center justify-between">
+          <span>{safeTxError}</span>
+          <button onClick={() => setSafeTxError(null)} className="ml-2 text-red-400 hover:text-red-600">&times;</button>
+        </div>
       )}
       {txHash && (
         <div className="text-sm text-gray-600">
@@ -292,6 +297,11 @@ function WalletStatus() {
   const [copied, setCopied] = useState(false)
   const [connectError, setConnectError] = useState<string | null>(null)
 
+  // Clear connect error when wallet state changes
+  useEffect(() => {
+    if (isConnected) setConnectError(null)
+  }, [isConnected])
+
   const { data: usdcBalance } = useContractRead({
     address: USDC_ADDRESS as `0x${string}`,
     abi: ERC20_ABI,
@@ -302,12 +312,23 @@ function WalletStatus() {
     },
   })
 
-  const handleCopy = () => {
-    if (address) {
-      navigator.clipboard.writeText(address)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+  const handleCopy = async () => {
+    if (!address) return
+    try {
+      await navigator.clipboard.writeText(address)
+    } catch {
+      // Fallback for HTTP contexts where Clipboard API is unavailable
+      const ta = document.createElement('textarea')
+      ta.value = address
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
     }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   const handleConnect = async () => {
@@ -322,7 +343,7 @@ function WalletStatus() {
   if (!isConnected) {
     if (isStandalone) {
       return (
-        <div className="p-3 bg-white rounded-lg shadow-md min-w-[280px]">
+        <div className="p-3 bg-white rounded-lg shadow-md w-full sm:w-auto sm:min-w-[280px]">
           <button
             onClick={handleConnect}
             className="bg-[#ff6b35] text-white px-4 py-2 rounded-lg hover:bg-[#ff5722] transition-colors font-semibold text-sm w-full"
@@ -336,7 +357,7 @@ function WalletStatus() {
       )
     }
     return (
-      <div className="p-3 bg-white rounded-lg shadow-md min-w-[280px]">
+      <div className="p-3 bg-white rounded-lg shadow-md w-full sm:w-auto sm:min-w-[280px]">
         <p className="text-sm text-gray-500">Waiting for wallet from host...</p>
       </div>
     )
@@ -345,7 +366,7 @@ function WalletStatus() {
   const formattedBalance = usdcBalance ? formatUnits(usdcBalance as bigint, 6) : '0'
 
   return (
-    <div className="p-3 bg-white rounded-lg shadow-md relative min-w-[280px]">
+    <div className="p-3 bg-white rounded-lg shadow-md relative w-full sm:w-auto sm:min-w-[280px]">
       <div className="flex items-center justify-between gap-3 mb-2">
         <div className="flex items-center gap-2">
           {address && <CirclesInfo address={address} />}
@@ -371,7 +392,7 @@ function WalletStatus() {
             </button>
             {isStandalone && (
               <button
-                onClick={disconnect}
+                onClick={() => { setConnectError(null); disconnect() }}
                 className="text-gray-400 hover:text-red-500 p-1"
                 title="Disconnect"
               >

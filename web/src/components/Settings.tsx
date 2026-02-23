@@ -117,8 +117,10 @@ export function Settings({ moduleEnabled }: { moduleEnabled?: boolean }) {
           )
           setSafeTxHash(txHash)
           setSafeTxSuccess(true)
-        } catch (err) {
-          setSafeTxError(err instanceof Error ? err.message : 'Transaction failed')
+        } catch (err: any) {
+          const isRejection = err?.code === 4001 || err?.message?.includes('User denied') || err?.message?.includes('rejected')
+          setSafeTxError(isRejection ? 'Transaction rejected by user' : (err instanceof Error ? err.message : 'Transaction failed'))
+          setTimeout(() => setSafeTxError(null), 8000)
         } finally {
           setSafeTxPending(false)
         }
@@ -303,7 +305,10 @@ export function Settings({ moduleEnabled }: { moduleEnabled?: boolean }) {
           </button>
 
           {safeTxError && (
-            <div className="text-xs text-center text-red-600 mt-2">{safeTxError}</div>
+            <div className="text-xs text-center text-red-600 mt-2 flex items-center justify-center gap-1">
+              <span>{safeTxError}</span>
+              <button onClick={() => setSafeTxError(null)} className="text-red-400 hover:text-red-600">&times;</button>
+            </div>
           )}
 
           {txHash && (

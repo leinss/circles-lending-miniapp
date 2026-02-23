@@ -21,8 +21,6 @@ export function useRepayPaths(borrowerAddress: string | undefined, enabled: bool
     queryFn: async () => {
       if (!borrowerAddress) return []
 
-      console.log('Finding repay paths for', borrowerAddress)
-
       const paths = await findRepayPaths(borrowerAddress)
 
       if (paths.length === 0) return []
@@ -64,7 +62,6 @@ export function useRepayPaths(borrowerAddress: string | undefined, enabled: bool
         }
       })
 
-      console.log(`Enriched ${enrichedPaths.length} repay paths`)
       return enrichedPaths
     },
     enabled: !!borrowerAddress && enabled,

@@ -40,8 +40,6 @@ interface LoanEdge {
  * Find all valid repay paths for a borrower by traversing their debt chain
  */
 export async function findRepayPaths(borrowerAddress: string): Promise<RepayPath[]> {
-  console.log(`\n=== Finding repay paths for ${borrowerAddress.slice(0, 8)} ===`)
-
   // Get all addresses in trust network (will expand as we explore)
   const sdk = new Sdk(CIRCLES_SDK_CONFIG)
   const relations = await sdk.data.getTrustRelations(borrowerAddress as `0x${string}`)
@@ -51,8 +49,6 @@ export async function findRepayPaths(borrowerAddress: string): Promise<RepayPath
     const addr = rel.subjectAvatar === borrowerAddress ? rel.objectAvatar : rel.subjectAvatar
     allAddresses.add(addr)
   })
-
-  console.log(`Initial trust network: ${allAddresses.size} addresses`)
 
   // Build loan graph by exploring from borrower outward (BFS style)
   // Limit depth to prevent infinite exploration
@@ -64,22 +60,14 @@ export async function findRepayPaths(borrowerAddress: string): Promise<RepayPath
   while (toExplore.length > 0) {
     const { address: currentBorrower, depth } = toExplore.shift()!
 
-    console.log(`\n>>> Popped from queue: ${currentBorrower.slice(0, 8)} at depth ${depth}`)
-
     // Skip if already explored
     if (exploredBorrowers.has(currentBorrower)) {
-      console.log(`    Already explored, skipping`)
       continue
     }
     exploredBorrowers.add(currentBorrower)
 
     // Stop if we've gone too deep
-    if (depth >= MAX_DEPTH) {
-      console.log(`Reached max depth ${MAX_DEPTH}, stopping exploration`)
-      break
-    }
-
-    console.log(`>>> Exploring: ${currentBorrower.slice(0, 8)}`)
+    if (depth >= MAX_DEPTH) break
 
     // Expand address set with this borrower's trust network
     if (currentBorrower !== borrowerAddress) {
@@ -89,9 +77,8 @@ export async function findRepayPaths(borrowerAddress: string): Promise<RepayPath
           const addr = rel.subjectAvatar === currentBorrower ? rel.objectAvatar : rel.subjectAvatar
           allAddresses.add(addr)
         })
-        console.log(`    Expanded trust network, now have ${allAddresses.size} addresses`)
       } catch {
-        console.log(`    Failed to get trust relations for ${currentBorrower.slice(0, 8)}`)
+        // trust relation lookup failed, continue with known addresses
       }
     }
 
@@ -128,26 +115,16 @@ export async function findRepayPaths(borrowerAddress: string): Promise<RepayPath
           allAddresses.add(lender)
 
           // Queue this lender to explore their debts
-          console.log(`    -> Found loan: ${borrower.slice(0, 6)} owes ${lender.slice(0, 6)}`)
-          console.log(`    -> Queueing ${lender.slice(0, 6)} for exploration at depth ${depth + 1}`)
           toExplore.push({ address: lender, depth: depth + 1 })
         }
       }
     }
 
-    console.log(`Found ${foundLoans} loans from ${currentBorrower.slice(0, 8)}`)
-
     // Exit early if queue is getting too large (safety valve)
     if (toExplore.length > 50) {
-      console.log('Queue too large, stopping exploration')
       break
     }
   }
-
-  console.log(`Found ${loanEdges.length} active loans`)
-  loanEdges.forEach(edge => {
-    console.log(`  ${edge.borrower.slice(0, 6)} owes ${edge.lender.slice(0, 6)}: ${edge.amount}`)
-  })
 
   // Build repay paths using DFS from borrower
   const repayPaths: RepayPath[] = []
@@ -169,7 +146,6 @@ export async function findRepayPaths(borrowerAddress: string): Promise<RepayPath
           totalOwed: firstLoanAmount, // Only the first loan amount matters
           maxInterestRate,
         })
-        console.log(`Found path: ${path.map(a => a.slice(0, 6)).join(' → ')} (${maxInterestRate.toFixed(2)}% max IR)`)
       }
       return
     }
@@ -198,6 +174,5 @@ export async function findRepayPaths(borrowerAddress: string): Promise<RepayPath
   // Sort paths by max interest rate (highest first) - prioritize paying expensive loans
   repayPaths.sort((a, b) => b.maxInterestRate - a.maxInterestRate)
 
-  console.log(`\nFound ${repayPaths.length} repay paths`)
   return repayPaths
 }

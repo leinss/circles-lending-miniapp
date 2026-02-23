@@ -96,7 +96,6 @@ export function useLendingPaths(borrowerAddress: string | undefined, enabled: bo
             // Dedupe by path addresses
             const pathKey = path.path.join('-')
             if (seenPaths.current.has(pathKey)) {
-              console.log('Skipping duplicate path:', pathKey)
               return
             }
             seenPaths.current.add(pathKey)

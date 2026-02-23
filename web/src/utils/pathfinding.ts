@@ -148,14 +148,12 @@ export async function findLendingPathsStreaming(
   let currentLayer = [borrowerAddress]
 
   for (let depth = 0; depth < maxDepth; depth++) {
-    console.log(`\n=== Depth ${depth}, exploring ${currentLayer.length} nodes ===`)
     onDepthChange?.(depth)
 
     const nextLayer = new Set<string>()
 
     const trustPromises = currentLayer.map(async (node) => {
       const trusters = await getTrusters(node)
-      console.log(`${node.slice(0, 8)} has ${trusters.length} trusters`)
       return { node, trusters }
     })
 
@@ -168,12 +166,9 @@ export async function findLendingPathsStreaming(
 
     if (addressesToCheck.size === 0) break
 
-    console.log(`Batch fetching settings for ${addressesToCheck.size} addresses`)
-
     const newSettings = await fetchUserSettings(Array.from(addressesToCheck))
     newSettings.forEach((settings, addr) => settingsMap.set(addr, settings))
 
-    console.log(`Found ${newSettings.size} with module enabled`)
 
     for (const { node, trusters } of trustResults) {
       const nodePaths = pathsToNode.get(node) || []
@@ -202,7 +197,6 @@ export async function findLendingPathsStreaming(
             const margin = lendIR - payIR
 
             if (margin < nodeSettings.minIRMargin) {
-              console.log(`${node.slice(0, 6)} margin ${margin} < min ${nodeSettings.minIRMargin}, skip`)
               continue
             }
           }
@@ -217,7 +211,6 @@ export async function findLendingPathsStreaming(
               irs: newIRs,
               sourceUSDC: settings.usdcBalance,
             }
-            console.log(`Found path: ${newPath.map(a => a.slice(0, 6)).join(' → ')}`)
             await onPathFound(validPath)
           }
 
@@ -240,7 +233,6 @@ export async function findLendingPathsStreaming(
     currentLayer = Array.from(nextLayer)
   }
 
-  console.log(`\nPathfinding complete`)
 }
 
 /**
@@ -263,14 +255,12 @@ export async function findLendingPaths(
   let currentLayer = [borrowerAddress]
 
   for (let depth = 0; depth < maxDepth; depth++) {
-    console.log(`\n=== Depth ${depth}, exploring ${currentLayer.length} nodes ===`)
 
     const nextLayer = new Set<string>()
 
     // Get trusters for all nodes in parallel
     const trustPromises = currentLayer.map(async (node) => {
       const trusters = await getTrusters(node)
-      console.log(`${node.slice(0, 8)} has ${trusters.length} trusters`)
       return { node, trusters }
     })
 
@@ -284,13 +274,10 @@ export async function findLendingPaths(
 
     if (addressesToCheck.size === 0) break
 
-    console.log(`Batch fetching settings for ${addressesToCheck.size} addresses`)
-
     // ONE multicall for all addresses
     const newSettings = await fetchUserSettings(Array.from(addressesToCheck))
     newSettings.forEach((settings, addr) => settingsMap.set(addr, settings))
 
-    console.log(`Found ${newSettings.size} with module enabled`)
 
     // Process each node's trusters
     for (const { node, trusters } of trustResults) {
@@ -327,7 +314,6 @@ export async function findLendingPaths(
             const margin = lendIR - payIR
 
             if (margin < nodeSettings.minIRMargin) {
-              console.log(`${node.slice(0, 6)} margin ${margin} < min ${nodeSettings.minIRMargin}, skip`)
               continue
             }
           }
@@ -342,7 +328,6 @@ export async function findLendingPaths(
               irs: newIRs,
               sourceUSDC: settings.usdcBalance,
             })
-            console.log(`Found path: ${newPath.map(a => a.slice(0, 6)).join(' → ')}`)
           }
 
           // Queue for next layer if willing to relay
@@ -365,7 +350,6 @@ export async function findLendingPaths(
     currentLayer = Array.from(nextLayer)
   }
 
-  console.log(`\nFound ${validPaths.length} total paths`)
   return validPaths
 }
 
