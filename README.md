@@ -97,8 +97,7 @@ The frontend is deployed to **GitHub Pages** via a GitHub Actions workflow (`.gi
 3. Deploy to GitHub Pages
 
 **URLs:**
-- GitHub Pages: `https://leinss.github.io/circles-lending-miniapp/`
-- Custom domain: `https://leinss.xyz` (redirect)
+- `https://leinss.xyz/circles-lending-miniapp/`
 
 ### Register in CirclesMiniapps
 
@@ -109,7 +108,7 @@ Add to `CirclesMiniapps/static/miniapps.json`:
   "slug": "lending",
   "name": "Circles Lending",
   "logo": "",
-  "url": "https://leinss.github.io/circles-lending-miniapp/",
+  "url": "https://leinss.xyz/circles-lending-miniapp/",
   "description": "Peer-to-peer uncollateralized lending using the Circles trust graph.",
   "tags": ["lending", "defi"]
 }

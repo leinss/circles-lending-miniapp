@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { formatUnits, parseUnits } from 'viem'
+import { encodeFunctionData, formatUnits, parseUnits } from 'viem'
 import { useWallet } from '../contexts/WalletContext.tsx'
 import { useContractRead } from '../hooks/useContractRead.ts'
 import { useSendTransaction } from '../hooks/useSendTransaction.ts'
 import { MODULE_ADDRESS } from '../config/constants.ts'
+import { executeSafeTransaction } from '../lib/safe-tx.ts'
 
 const MODULE_ABI = [{
   name: 'limits',
@@ -36,15 +37,16 @@ const MODULE_ABI = [{
 }] as const
 
 export function Settings({ moduleEnabled }: { moduleEnabled?: boolean }) {
-  const { address } = useWallet()
+  const { address, safeAddress, isStandalone } = useWallet()
 
+  // Read limits for the Safe address (module stores limits per-Safe)
   const { data: limits, refetch } = useContractRead({
     address: MODULE_ADDRESS as `0x${string}`,
     abi: MODULE_ABI,
     functionName: 'limits',
-    args: address ? [address] : undefined,
+    args: safeAddress ? [safeAddress] : undefined,
     query: {
-      enabled: !!address,
+      enabled: !!safeAddress,
     },
   })
 
@@ -53,6 +55,12 @@ export function Settings({ moduleEnabled }: { moduleEnabled?: boolean }) {
   const [borrowCap, setBorrowCap] = useState('')
   const [maxBorrowIR, setMaxBorrowIR] = useState('')
   const [minIRMargin, setMinIRMargin] = useState('')
+
+  // Standalone Safe tx state
+  const [safeTxHash, setSafeTxHash] = useState<string | undefined>(undefined)
+  const [safeTxPending, setSafeTxPending] = useState(false)
+  const [safeTxSuccess, setSafeTxSuccess] = useState(false)
+  const [safeTxError, setSafeTxError] = useState<string | null>(null)
 
   const limitsTuple = limits as readonly [bigint, bigint, bigint, bigint, bigint] | undefined
   const isConfigured = limitsTuple && (limitsTuple[0] > 0n || limitsTuple[1] > 0n || limitsTuple[2] > 0n)
@@ -71,13 +79,13 @@ export function Settings({ moduleEnabled }: { moduleEnabled?: boolean }) {
   const { send, hash, isPending, isSuccess } = useSendTransaction()
 
   useEffect(() => {
-    if (isSuccess) {
+    if (isSuccess || safeTxSuccess) {
       refetch()
     }
-  }, [isSuccess, refetch])
+  }, [isSuccess, safeTxSuccess, refetch])
 
-  const handleSave = () => {
-    if (!address) return
+  const handleSave = async () => {
+    if (!safeAddress || !address) return
 
     try {
       const SECONDS_PER_YEAR = 365 * 24 * 60 * 60
@@ -89,19 +97,50 @@ export function Settings({ moduleEnabled }: { moduleEnabled?: boolean }) {
         minIRMargin: BigInt(Math.floor(parseFloat(minIRMargin || '0') / 100 / SECONDS_PER_YEAR * 1e18)),
       }
 
-      send({
-        address: MODULE_ADDRESS as `0x${string}`,
-        abi: MODULE_ABI,
-        functionName: 'setSettings',
-        args: [settings],
-      })
+      if (isStandalone) {
+        // Standalone: route setSettings through Safe execTransaction
+        setSafeTxPending(true)
+        setSafeTxSuccess(false)
+        setSafeTxError(null)
+        setSafeTxHash(undefined)
+        try {
+          const data = encodeFunctionData({
+            abi: MODULE_ABI,
+            functionName: 'setSettings',
+            args: [settings],
+          })
+          const txHash = await executeSafeTransaction(
+            safeAddress,
+            MODULE_ADDRESS as `0x${string}`,
+            data,
+            address,
+          )
+          setSafeTxHash(txHash)
+          setSafeTxSuccess(true)
+        } catch (err) {
+          setSafeTxError(err instanceof Error ? err.message : 'Transaction failed')
+        } finally {
+          setSafeTxPending(false)
+        }
+      } else {
+        // Iframe: send via postMessage (host routes through Safe UserOp)
+        send({
+          address: MODULE_ADDRESS as `0x${string}`,
+          abi: MODULE_ABI,
+          functionName: 'setSettings',
+          args: [settings],
+        })
+      }
     } catch (err) {
       console.error('Failed to save settings:', err)
-      alert('Invalid settings values')
     }
   }
 
-  if (!address || !moduleEnabled) return null
+  const pending = isStandalone ? safeTxPending : isPending
+  const txHash = isStandalone ? safeTxHash : hash
+  const success = isStandalone ? safeTxSuccess : isSuccess
+
+  if (!safeAddress || !moduleEnabled) return null
 
   const SECONDS_PER_YEAR = 365 * 24 * 60 * 60
   const currentLendingCap = limitsTuple ? formatUnits(limitsTuple[0], 6) : '0'
@@ -257,16 +296,20 @@ export function Settings({ moduleEnabled }: { moduleEnabled?: boolean }) {
 
           <button
             onClick={handleSave}
-            disabled={isPending}
+            disabled={pending}
             className="w-full bg-gradient-to-r from-[#ff6b35] to-[#ff5722] text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:shadow-lg transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none shadow-md"
           >
-            {isPending ? 'Saving...' : (isConfigured ? 'Update Settings' : 'Save Settings')}
+            {pending ? 'Saving...' : (isConfigured ? 'Update Settings' : 'Save Settings')}
           </button>
 
-          {hash && (
+          {safeTxError && (
+            <div className="text-xs text-center text-red-600 mt-2">{safeTxError}</div>
+          )}
+
+          {txHash && (
             <div className="text-xs text-center text-gray-600 font-mono mt-2">
-              Transaction: {hash.slice(0, 10)}...{hash.slice(-8)}
-              {isSuccess && ' ✓'}
+              Transaction: {txHash.slice(0, 10)}...{txHash.slice(-8)}
+              {success && ' ✓'}
             </div>
           )}
         </div>

@@ -8,62 +8,153 @@ import { Settings } from './components/Settings.tsx'
 import { Borrow } from './components/Borrow.tsx'
 import { Debts } from './components/Debts.tsx'
 import { Sdk } from '@aboutcircles/sdk'
-import { formatUnits } from 'viem'
+import { encodeFunctionData, formatUnits } from 'viem'
 import { MODULE_ADDRESS, SAFE_ABI, USDC_ADDRESS, ERC20_ABI, CIRCLES_SDK_CONFIG } from './config/constants.ts'
+import { executeSafeTransaction } from './lib/safe-tx.ts'
+import type { Address } from './lib/miniapp-sdk.ts'
 
 const queryClient = new QueryClient()
 
 function EnableModule() {
-  const { address } = useWallet()
-
+  const { address, safeAddress, isStandalone } = useWallet()
   const { send, hash, isPending, isSuccess } = useSendTransaction()
+  const [safeTxHash, setSafeTxHash] = useState<string | undefined>(undefined)
+  const [safeTxPending, setSafeTxPending] = useState(false)
+  const [safeTxError, setSafeTxError] = useState<string | null>(null)
 
-  const handleEnableModule = () => {
-    if (!address) return
+  const handleEnableModule = async () => {
+    if (!safeAddress) return
 
-    send({
-      address: address,
-      abi: SAFE_ABI,
-      functionName: 'enableModule',
-      args: [MODULE_ADDRESS as `0x${string}`],
-    })
+    if (isStandalone && address) {
+      // Standalone: route through Safe execTransaction
+      setSafeTxPending(true)
+      setSafeTxError(null)
+      setSafeTxHash(undefined)
+      try {
+        const data = encodeFunctionData({
+          abi: SAFE_ABI,
+          functionName: 'enableModule',
+          args: [MODULE_ADDRESS as `0x${string}`],
+        })
+        const hash = await executeSafeTransaction(safeAddress, safeAddress, data, address)
+        setSafeTxHash(hash)
+      } catch (err) {
+        setSafeTxError(err instanceof Error ? err.message : 'Transaction failed')
+      } finally {
+        setSafeTxPending(false)
+      }
+    } else {
+      // Iframe: send via postMessage (host routes through Safe UserOp)
+      send({
+        address: safeAddress,
+        abi: SAFE_ABI,
+        functionName: 'enableModule',
+        args: [MODULE_ADDRESS as `0x${string}`],
+      })
+    }
   }
+
+  const pending = isStandalone ? safeTxPending : isPending
+  const txHash = isStandalone ? safeTxHash : hash
+  const success = isStandalone ? !!safeTxHash : isSuccess
 
   return (
     <div className="flex flex-col gap-4">
       <button
         onClick={handleEnableModule}
-        disabled={isPending}
+        disabled={pending}
         className="bg-[#ff6b35] text-white px-4 py-3 rounded-lg hover:bg-[#ff5722] transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
       >
-        {isPending ? 'Enabling Module...' : 'Enable Module'}
+        {pending ? 'Enabling Module...' : 'Enable Module'}
       </button>
-      {hash && (
+      {safeTxError && (
+        <div className="text-sm text-red-600">{safeTxError}</div>
+      )}
+      {txHash && (
         <div className="text-sm text-gray-600">
-          Transaction: {hash.slice(0, 10)}...{hash.slice(-8)}
-          {isSuccess && ' ✓'}
+          Transaction: {txHash.slice(0, 10)}...{txHash.slice(-8)}
+          {success && ' ✓'}
         </div>
       )}
     </div>
   )
 }
 
+function SafeErrorFallback() {
+  const { safeError, setSafeAddress } = useWallet()
+  const [manualAddress, setManualAddress] = useState('')
+
+  const handleSubmit = () => {
+    const trimmed = manualAddress.trim()
+    if (trimmed.match(/^0x[a-fA-F0-9]{40}$/)) {
+      setSafeAddress(trimmed as Address)
+    }
+  }
+
+  return (
+    <div className="bg-white p-6 rounded-lg shadow-md max-w-md">
+      <div className="flex items-start gap-3 mb-4">
+        <svg className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+        </svg>
+        <div className="flex-1">
+          <p className="text-sm font-medium text-gray-800 mb-1">{safeError}</p>
+          <p className="text-xs text-gray-500 mb-3">Enter your Safe address manually:</p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={manualAddress}
+              onChange={(e) => setManualAddress(e.target.value)}
+              placeholder="0x..."
+              className="flex-1 px-3 py-2 text-xs font-mono border-2 border-gray-200 rounded-lg focus:border-[#ff6b35] outline-none"
+            />
+            <button
+              onClick={handleSubmit}
+              disabled={!manualAddress.match(/^0x[a-fA-F0-9]{40}$/)}
+              className="px-3 py-2 text-xs font-semibold bg-[#ff6b35] text-white rounded-lg hover:bg-[#ff5722] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Use
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function LenderPanel() {
-  const { address, isConnected } = useWallet()
+  const { isConnected, safeAddress, safeLoading, safeError } = useWallet()
 
   const { data: moduleEnabledRaw } = useContractRead({
-    address: address,
+    address: safeAddress,
     abi: SAFE_ABI,
     functionName: 'isModuleEnabled',
     args: [MODULE_ADDRESS as `0x${string}`],
     query: {
-      enabled: !!address && isConnected,
+      enabled: !!safeAddress && isConnected,
     },
   })
 
   const moduleEnabled = !!moduleEnabledRaw
 
   if (!isConnected) return null
+
+  if (safeLoading) {
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-md max-w-md">
+        <div className="flex items-center gap-3">
+          <div className="animate-spin w-5 h-5 border-2 border-gray-300 border-t-[#ff6b35] rounded-full" />
+          <span className="text-sm text-gray-600">Looking up your Safe wallet...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (safeError) {
+    return <SafeErrorFallback />
+  }
+
+  if (!safeAddress) return null
 
   return (
     <div className="space-y-6 max-w-md">
@@ -112,41 +203,14 @@ function BorrowerPanel() {
   )
 }
 
-function StandaloneBanner() {
-  return (
-    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 max-w-md">
-      <div className="flex items-start gap-2">
-        <svg className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <div>
-          <p className="text-sm font-medium text-amber-800">Standalone mode</p>
-          <p className="text-xs text-amber-700 mt-1">
-            Lending requires a Safe account. Use the{' '}
-            <a
-              href="https://circles.land"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline font-medium"
-            >
-              Circles miniapp
-            </a>{' '}
-            version to become a lender.
-          </p>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function Dashboard() {
-  const { isConnected, isStandalone } = useWallet()
+  const { isConnected } = useWallet()
 
   if (!isConnected) return null
 
   return (
     <div className="flex flex-col lg:flex-row gap-8 max-w-6xl mx-auto">
-      {isStandalone ? <StandaloneBanner /> : <LenderPanel />}
+      <LenderPanel />
       <div className="flex-1 max-w-2xl">
         <BorrowerPanel />
       </div>
@@ -224,7 +288,7 @@ function CirclesInfo({ address }: { address: string }) {
 }
 
 function WalletStatus() {
-  const { address, isConnected, isStandalone, connect, disconnect } = useWallet()
+  const { address, isConnected, isStandalone, safeAddress, connect, disconnect } = useWallet()
   const [copied, setCopied] = useState(false)
   const [connectError, setConnectError] = useState<string | null>(null)
 
@@ -289,9 +353,7 @@ function WalletStatus() {
         <div className="flex flex-col items-end gap-1">
           <div className="flex items-center gap-1">
             <a
-              href={isStandalone
-                ? `https://gnosisscan.io/address/${address}`
-                : `https://app.safe.global/home?safe=gno:${address}`}
+              href={`https://gnosisscan.io/address/${address}`}
               target="_blank"
               rel="noopener noreferrer"
               className="font-mono text-xs text-gray-600 hover:text-gray-800"
@@ -319,6 +381,18 @@ function WalletStatus() {
               </button>
             )}
           </div>
+          {/* Show Safe address when in standalone mode and Safe is different from EOA */}
+          {isStandalone && safeAddress && safeAddress !== address && (
+            <a
+              href={`https://app.safe.global/home?safe=gno:${safeAddress}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-xs text-blue-500 hover:text-blue-700"
+              title="Safe wallet"
+            >
+              Safe: {safeAddress.slice(0, 6)}...{safeAddress.slice(-4)}
+            </a>
+          )}
         </div>
       </div>
 
