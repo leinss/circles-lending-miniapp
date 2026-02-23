@@ -83,14 +83,15 @@ When the app is opened directly in a browser (not inside the CirclesMiniapps ifr
 
 - Detects standalone via `window.parent === window`
 - Connects through `window.ethereum` (MetaMask, Rabby, etc.)
-- Transactions are sent individually via the injected provider (no batching — one popup per tx)
-- Signing uses `personal_sign` directly
+- Looks up Safes owned by the connected EOA via the Safe Transaction Service API
+- If the EOA owns multiple Safes, a dropdown lets the user switch between them
+- Transactions route through Safe's `execTransaction` using a `v=1` owner-signature (single wallet popup per action — no separate signing step)
 
 This lets developers test without the CirclesMiniapps host and allows users to access the app as a regular dApp.
 
 ## Deployment
 
-The frontend is deployed to **GitHub Pages** via a GitHub Actions workflow (`.github/workflows/deploy.yml`). Every push to `main` triggers:
+The frontend is deployed to **GitHub Pages** via a GitHub Actions workflow (`.github/workflows/deploy.yml`). Every push to `main` triggers an automatic deploy. Manual deploys can be triggered via `workflow_dispatch` in the GitHub Actions UI.
 
 1. `npm ci && npm run build` in `web/`
 2. Upload `web/dist/` as a Pages artifact
