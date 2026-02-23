@@ -1,10 +1,9 @@
 /**
  * Typed SDK for mini apps running inside the CirclesMiniapps iframe host.
+ * Also supports standalone mode using an injected wallet (MetaMask etc.).
  *
- * Ported from CirclesMiniapps/examples/miniapp-sdk.js
- *
- * Works identically whether loaded inside the host iframe or opened standalone
- * (standalone simply never receives wallet_connected, so the UI stays disconnected).
+ * In iframe mode: wallet state and transactions go through postMessage bridge.
+ * In standalone mode: uses window.ethereum (injected provider) directly.
  */
 
 export type Address = `0x${string}`
@@ -20,6 +19,16 @@ export interface SignResult {
   verified: boolean
 }
 
+declare global {
+  interface Window {
+    ethereum?: {
+      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>
+      on: (event: string, handler: (...args: unknown[]) => void) => void
+      removeListener: (event: string, handler: (...args: unknown[]) => void) => void
+    }
+  }
+}
+
 type WalletListener = (address: Address | null) => void
 type DataListener = (data: string) => void
 type PendingRequest<T> = {
@@ -27,11 +36,16 @@ type PendingRequest<T> = {
   reject: (error: Error) => void
 }
 
+/** True when NOT loaded inside an iframe (direct browser access) */
+export const isStandalone = window.parent === window
+
 let _address: Address | null = null
 const _listeners: WalletListener[] = []
 const _dataListeners: DataListener[] = []
 let _requestCounter = 0
 const _pending: Record<string, PendingRequest<unknown>> = {}
+
+// --- Iframe mode: postMessage bridge ---
 
 window.addEventListener('message', (event: MessageEvent) => {
   const d = event.data
@@ -77,40 +91,99 @@ window.addEventListener('message', (event: MessageEvent) => {
   }
 })
 
-// Ask the host for the current wallet state on load
-if (window.parent !== window) {
+if (!isStandalone) {
   window.parent.postMessage({ type: 'request_address' }, '*')
 }
 
-/**
- * Register a callback that fires when the host sends app-specific data via ?data= param.
- */
+// --- Standalone mode: injected provider ---
+
+/** Connect via injected wallet (MetaMask etc.). Standalone only. */
+export async function connectInjected(): Promise<Address> {
+  if (!window.ethereum) throw new Error('No wallet extension found. Install MetaMask.')
+  const accounts = (await window.ethereum.request({ method: 'eth_requestAccounts' })) as string[]
+  const addr = accounts[0] as Address
+  _address = addr
+  _listeners.forEach((fn) => fn(_address))
+  return addr
+}
+
+/** Disconnect in standalone mode. */
+export function disconnectInjected(): void {
+  _address = null
+  _listeners.forEach((fn) => fn(null))
+}
+
+// Listen for account/chain changes from injected provider
+if (isStandalone && window.ethereum) {
+  window.ethereum.on('accountsChanged', (accounts: unknown) => {
+    const accs = accounts as string[]
+    if (accs.length > 0) {
+      _address = accs[0] as Address
+      _listeners.forEach((fn) => fn(_address))
+    } else {
+      _address = null
+      _listeners.forEach((fn) => fn(null))
+    }
+  })
+
+  // Auto-reconnect if previously authorized (no popup)
+  window.ethereum.request({ method: 'eth_accounts' }).then((accounts) => {
+    const accs = accounts as string[]
+    if (accs.length > 0) {
+      _address = accs[0] as Address
+      _listeners.forEach((fn) => fn(_address))
+    }
+  })
+}
+
+// --- Standalone transaction/signing helpers ---
+
+async function _sendViaInjected(transactions: Transaction[]): Promise<string[]> {
+  if (!window.ethereum || !_address) throw new Error('Wallet not connected')
+  const hashes: string[] = []
+  for (const tx of transactions) {
+    const hash = (await window.ethereum.request({
+      method: 'eth_sendTransaction',
+      params: [{ from: _address, to: tx.to, data: tx.data || '0x', value: tx.value || '0x0' }],
+    })) as string
+    hashes.push(hash)
+  }
+  return hashes
+}
+
+async function _signViaInjected(message: string): Promise<SignResult> {
+  if (!window.ethereum || !_address) throw new Error('Wallet not connected')
+  const signature = (await window.ethereum.request({
+    method: 'personal_sign',
+    params: [message, _address],
+  })) as string
+  return { signature, verified: true }
+}
+
+// --- Public API (mode-agnostic) ---
+
 export function onAppData(fn: DataListener): void {
   _dataListeners.push(fn)
 }
 
-/**
- * Register a callback that fires whenever wallet connection changes.
- * Called immediately with current state, then again on every change.
- */
 export function onWalletChange(fn: WalletListener): void {
   _listeners.push(fn)
   fn(_address) // fire with current state
 }
 
-/**
- * Unregister a wallet change listener.
- */
 export function offWalletChange(fn: WalletListener): void {
   const idx = _listeners.indexOf(fn)
   if (idx !== -1) _listeners.splice(idx, 1)
 }
 
 /**
- * Request the host to send one or more transactions.
- * Returns array of tx hashes after the UserOp is mined.
+ * Send one or more transactions.
+ * Iframe mode: delegates to host via postMessage (batched as single UserOp).
+ * Standalone mode: sends each tx via injected provider (one popup per tx).
  */
 export function sendTransactions(transactions: Transaction[]): Promise<string[]> {
+  if (isStandalone) return _sendViaInjected(transactions)
+
   return new Promise((resolve, reject) => {
     const requestId = 'req_' + ++_requestCounter
     _pending[requestId] = { resolve, reject } as PendingRequest<unknown>
@@ -119,9 +192,12 @@ export function sendTransactions(transactions: Transaction[]): Promise<string[]>
 }
 
 /**
- * Request the host to sign an arbitrary message.
+ * Sign an arbitrary message.
+ * Iframe mode: delegates to host. Standalone mode: uses personal_sign.
  */
 export function signMessage(message: string): Promise<SignResult> {
+  if (isStandalone) return _signViaInjected(message)
+
   return new Promise((resolve, reject) => {
     const requestId = 'req_' + ++_requestCounter
     _pending[requestId] = { resolve, reject } as PendingRequest<unknown>

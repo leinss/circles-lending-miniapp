@@ -1,14 +1,27 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
-import { onWalletChange, offWalletChange, type Address } from '../lib/miniapp-sdk.ts'
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+import {
+  onWalletChange, offWalletChange,
+  isStandalone, connectInjected, disconnectInjected,
+  type Address,
+} from '../lib/miniapp-sdk.ts'
 
 interface WalletState {
   address: Address | undefined
   isConnected: boolean
+  /** True when running outside the CirclesMiniapps iframe host */
+  isStandalone: boolean
+  /** Connect via injected provider (standalone only) */
+  connect: () => Promise<void>
+  /** Disconnect (standalone only) */
+  disconnect: () => void
 }
 
 const WalletContext = createContext<WalletState>({
   address: undefined,
   isConnected: false,
+  isStandalone: false,
+  connect: async () => {},
+  disconnect: () => {},
 })
 
 export function WalletProvider({ children }: { children: ReactNode }) {
@@ -22,8 +35,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return () => offWalletChange(handler)
   }, [])
 
+  const connect = useCallback(async () => {
+    await connectInjected()
+  }, [])
+
+  const disconnect = useCallback(() => {
+    disconnectInjected()
+  }, [])
+
   return (
-    <WalletContext.Provider value={{ address, isConnected: !!address }}>
+    <WalletContext.Provider value={{
+      address,
+      isConnected: !!address,
+      isStandalone,
+      connect,
+      disconnect,
+    }}>
       {children}
     </WalletContext.Provider>
   )

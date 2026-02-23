@@ -198,8 +198,9 @@ function CirclesInfo({ address }: { address: string }) {
 }
 
 function WalletStatus() {
-  const { address, isConnected } = useWallet()
+  const { address, isConnected, isStandalone, connect, disconnect } = useWallet()
   const [copied, setCopied] = useState(false)
+  const [connectError, setConnectError] = useState<string | null>(null)
 
   const { data: usdcBalance } = useContractRead({
     address: USDC_ADDRESS as `0x${string}`,
@@ -219,7 +220,31 @@ function WalletStatus() {
     }
   }
 
+  const handleConnect = async () => {
+    try {
+      setConnectError(null)
+      await connect()
+    } catch (err) {
+      setConnectError(err instanceof Error ? err.message : 'Connection failed')
+    }
+  }
+
   if (!isConnected) {
+    if (isStandalone) {
+      return (
+        <div className="p-3 bg-white rounded-lg shadow-md min-w-[280px]">
+          <button
+            onClick={handleConnect}
+            className="bg-[#ff6b35] text-white px-4 py-2 rounded-lg hover:bg-[#ff5722] transition-colors font-semibold text-sm w-full"
+          >
+            Connect Wallet
+          </button>
+          {connectError && (
+            <p className="text-xs text-red-500 mt-2">{connectError}</p>
+          )}
+        </div>
+      )
+    }
     return (
       <div className="p-3 bg-white rounded-lg shadow-md min-w-[280px]">
         <p className="text-sm text-gray-500">Waiting for wallet from host...</p>
@@ -254,6 +279,17 @@ function WalletStatus() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
               </svg>
             </button>
+            {isStandalone && (
+              <button
+                onClick={disconnect}
+                className="text-gray-400 hover:text-red-500 p-1"
+                title="Disconnect"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
       </div>
