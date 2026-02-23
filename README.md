@@ -1,20 +1,24 @@
-# Circles Lending Mini App (Raila)
+# Circles Lending Mini App
 
 Peer-to-peer uncollateralized lending using the Circles trust graph. Borrow, lend, or relay loans through trusted connections.
 
-Runs as a [CirclesMiniapps](https://circles.gnosis.io/miniapps) mini app inside an iframe host — wallet connectivity is provided via postMessage bridge, not an injected provider.
+Works in two modes:
+
+- **Embedded** — runs as a [CirclesMiniapps](https://circles.gnosis.io/miniapps) mini app inside an iframe host; wallet connectivity via postMessage bridge
+- **Standalone** — opened directly in a browser; connects via injected wallet (MetaMask etc.)
 
 ## Original Repository
 
-Forked and ported from [leinss/raila-circles](https://github.com/leinss/raila-circles) — the original standalone React app using Wagmi for wallet connectivity.
+Ported from [greenlucid/raila-circles](https://github.com/greenlucid/raila-circles), adapted to run as a CirclesMiniapps mini app (Wagmi replaced with postMessage bridge, standalone injected-provider fallback added).
 
 ### What changed from the original
 
 - **Wagmi removed** — replaced with a thin abstraction layer (`miniapp-sdk.ts`, `WalletContext.tsx`, `useContractRead.ts`, `useSendTransaction.ts`) that uses viem for encoding and the miniapp-sdk postMessage protocol for transaction submission
+- **Dual-mode wallet** — `miniapp-sdk.ts` detects `window.parent === window` to choose between iframe postMessage bridge and injected provider (`window.ethereum`), so the app works both embedded and standalone
 - **Batched transactions** — approve + repay are now sent as a single `sendTransactions()` call (one confirmation instead of two)
 - **Circles SDK RPC** — overridden to use `staging.circlesubi.network`
 - **Build output** — `base: './'` in vite config for relative asset paths (deployable to any path)
-- **Onboarding** — simplified to Raila-specific instructions (removed Rabby/WalletConnect setup steps)
+- **Onboarding** — simplified to lending-specific instructions (removed Rabby/WalletConnect setup steps)
 
 ## Structure
 
@@ -25,7 +29,7 @@ contracts/          Foundry project — RailaModule Solidity contracts
   test/             Foundry tests
 web/                Vite + React 19 frontend
   src/
-    lib/            miniapp-sdk.ts (postMessage bridge to host)
+    lib/            miniapp-sdk.ts (postMessage bridge + injected provider fallback)
     contexts/       WalletContext (replaces Wagmi provider)
     hooks/          useContractRead, useSendTransaction, useLendingPaths, useRepayPaths
     components/     UI components (Borrow, Debts, Settings, TrustNetwork)
@@ -73,18 +77,28 @@ forge script scripts/DeployRaila.s.sol:DeployRaila \
   --chain-id 100
 ```
 
+## Standalone Mode
+
+When the app is opened directly in a browser (not inside the CirclesMiniapps iframe), it automatically switches to **standalone mode**:
+
+- Detects standalone via `window.parent === window`
+- Connects through `window.ethereum` (MetaMask, Rabby, etc.)
+- Transactions are sent individually via the injected provider (no batching — one popup per tx)
+- Signing uses `personal_sign` directly
+
+This lets developers test without the CirclesMiniapps host and allows users to access the app as a regular dApp.
+
 ## Deployment
 
-Built frontend is deployed to GitHub Pages and registered in the CirclesMiniapps host via `miniapps.json`.
+The frontend is deployed to **GitHub Pages** via a GitHub Actions workflow (`.github/workflows/deploy.yml`). Every push to `main` triggers:
 
-### GitHub Pages setup
+1. `npm ci && npm run build` in `web/`
+2. Upload `web/dist/` as a Pages artifact
+3. Deploy to GitHub Pages
 
-```bash
-# Build produces web/dist/ with relative paths (base: './')
-cd web && npm run build
-
-# Deploy dist/ to gh-pages branch
-```
+**URLs:**
+- GitHub Pages: `https://leinss.github.io/circles-lending-miniapp/`
+- Custom domain: `https://leinss.xyz` (redirect)
 
 ### Register in CirclesMiniapps
 
@@ -92,8 +106,8 @@ Add to `CirclesMiniapps/static/miniapps.json`:
 
 ```json
 {
-  "slug": "raila",
-  "name": "Raila Lending",
+  "slug": "lending",
+  "name": "Circles Lending",
   "logo": "",
   "url": "https://leinss.github.io/circles-lending-miniapp/",
   "description": "Peer-to-peer uncollateralized lending using the Circles trust graph.",
@@ -103,10 +117,12 @@ Add to `CirclesMiniapps/static/miniapps.json`:
 
 ## Architecture
 
-The miniapp runs in an iframe hosted by CirclesMiniapps at `circles.gnosis.io/miniapps/raila`. The host provides:
+The miniapp runs in an iframe hosted by CirclesMiniapps at `circles.gnosis.io/miniapps/lending`. The host provides:
 
 1. **Wallet address** via `wallet_connected` postMessage events
 2. **Transaction submission** via `send_transactions` — the host shows an approval popup, executes the UserOp through the Safe, and returns tx hashes
 3. **Message signing** via `sign_message`
 
 The app uses viem's `publicClient` for all read operations (multicall, readContract) and viem's `encodeFunctionData` to prepare calldata for writes. No gas estimation or nonce management needed — the host handles that.
+
+In standalone mode, these same functions route through `window.ethereum` instead (see [Standalone Mode](#standalone-mode)).
